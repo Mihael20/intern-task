@@ -1,59 +1,112 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Систем за клиентски сметки и хартии од вредност
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel бекенд (REST API) кој ги памти сите движења на клиентска сметка
+(депозит, подигнување, купување, продавање) и во секој момент може да
+пресмета колку готовина клиентот има и што поседува.
 
-## About Laravel
+## Како да се подигне проектот локално
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+touch database/database.sqlite
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+php artisan migrate --seed
+php artisan test
+php artisan serve
+```
 
-## Learning Laravel
+По ова, API-то е достапно на `http://127.0.0.1:8000/api`.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+`--seed` внесува 3 примерни клиенти (Ана, Марко, Јана) со неколку
+движења секоја.
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Начини за комуникација со системот
 
-## Laravel Sponsors
+### Креирање клиент
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+ POST /api/clients
+ { "name": "Ана Петровска" }
 
-### Premium Partners
+### Депозит
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+ POST /api/clients/{id}/deposit
+ { "amount": 1000 }
 
-## Contributing
+### Подигнување
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+POST /api/clients/{id}/withdraw
+{ "amount": 300 }
 
-## Code of Conduct
+Ако бараниот износ е поголем од достапната готовина, враќа `422`.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Купување
 
-## Security Vulnerabilities
+POST /api/clients/{id}/buy
+{ "instrument": "AAPL", "quantity": 5, "price": 100 }
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
 
-## License
+### Продавање
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+POST /api/clients/{id}/sell
+{ "instrument": "AAPL", "quantity": 3, "price": 120 }
+
+Ако количината е поголема од тоа што клиентот поседува, враќа `422`.
+
+### Преглед на состојба
+
+GET /api/clients/{id}
+
+
+### Целосна историја (ledger)
+
+GET /api/clients/{id}/transactions
+
+
+### Список на сите клиенти
+
+GET /api/clients
+
+
+## Зошто вака
+
+**Состојбата се пресметува од историјата, не се чува посебно.**
+Готовината и поседувањата секогаш се пресметуваат од целата листа
+движења (`AccountService::getCashBalance` / `getHoldings`), наместо да
+се чуваат во посебна колона што се ажурира при секое движење. Ова
+значи дека не постои начин состојбата да се расинхронизира со
+историјата.
+
+**Правилата се во сервисна класа, не во контролерот.**
+`AccountController` и `ClientController` не одлучуваат ништо - само го
+викаат `AccountService`. Ова прави тестирање можно директно, без да се
+минува низ HTTP слој.
+
+**Секое движење се пишува во `DB::transaction()` со `lockForUpdate()`.**
+Ова спречува race condition - ако два барања пристигнат речиси во исто
+време, базата ги сериjализира. `DB::transaction` автоматски прави
+rollback штом се фрли исклучок, па нема половично запишани редови.
+
+**Исклучоци наместо if/враќање грешка низ повеќе слоеви.**
+`InsufficientFundsException` и `InsufficientHoldingsException` се
+фрлаат директно од `AccountService` и се фаќаат централно во
+`bootstrap/app.php`, каде се претвораат во `422` JSON одговор.
+
+**Валидацијата на формат е одвоена од валидацијата на бизнис-правила.**
+Form Request класите проверуваат дали бројот воопшто има смисла (не е
+негативен, е цел број), пред барањето да стигне до `AccountService`,
+каде се проверува дали конкретното движење е дозволено за конкретниот
+клиент.
+
+**Инструментот секогаш се чува со главни букви.** Со ова "aapl" и
+"AAPL" се третираат како ист инструмент.
+
+## Примерни клиенти (по seed)
+
+| Клиент | Готовина | Поседувања |
+|---|---|---|
+| Ана Петровска | 860.00 | 2 AAPL |
+| Марко Стојаноски | 1780.00 | 6 MSFT, 4 TSLA |
+| Јана Илиевска | 250.00 | (ништо) |
