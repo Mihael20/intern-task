@@ -27,48 +27,164 @@ php artisan serve
 
 ### Креирање клиент
 
- POST /api/clients
- { "name": "Ана Петровска" }
+Испраќаш:
+
+POST /api/clients
+{ "name": "Ана Петровска" }
+
+
+Добиваш назад:
+```json
+{
+  "data": {
+    "id": 1,
+    "name": "Ана Петровска",
+    "cash_balance": 0,
+    "holdings": []
+  }
+}
+```
 
 ### Депозит
 
- POST /api/clients/{id}/deposit
- { "amount": 1000 }
+Испраќаш:
+
+POST /api/clients/1/deposit
+{ "amount": 1000 }
+
+
+Добиваш назад:
+```json
+{
+  "data": {
+    "transaction": { "id": 4, "type": "deposit", "amount": 1000, "instrument": null, "quantity": null, "price": null },
+    "cash_balance": 1000,
+    "holdings": []
+  }
+}
+```
 
 ### Подигнување
 
-POST /api/clients/{id}/withdraw
+Испраќаш:
+
+POST /api/clients/1/withdraw
 { "amount": 300 }
 
-Ако бараниот износ е поголем од достапната готовина, враќа `422`.
+
+Добиваш назад:
+```json
+{
+  "data": {
+    "transaction": { "id": 5, "type": "withdrawal", "amount": 300, "instrument": null, "quantity": null, "price": null },
+    "cash_balance": 700,
+    "holdings": []
+  }
+}
+```
+
+Ако бараниот износ е поголем од достапната готовина, враќа `422`:
+```json
+{ "message": "Клиентот „Ана Петровска“ има само 700 на располагање, не може да подигне 5000." }
+```
 
 ### Купување
 
-POST /api/clients/{id}/buy
+Испраќаш:
+
+POST /api/clients/1/buy
 { "instrument": "AAPL", "quantity": 5, "price": 100 }
 
 
+Добиваш назад:
+```json
+{
+  "data": {
+    "transaction": { "id": 6, "type": "buy", "amount": 500, "instrument": "AAPL", "quantity": 5, "price": 100 },
+    "cash_balance": 200,
+    "holdings": { "AAPL": 5 }
+  }
+}
+```
+
 ### Продавање
 
-POST /api/clients/{id}/sell
+Испраќаш:
+
+POST /api/clients/1/sell
 { "instrument": "AAPL", "quantity": 3, "price": 120 }
 
-Ако количината е поголема од тоа што клиентот поседува, враќа `422`.
+
+Добиваш назад:
+```json
+{
+  "data": {
+    "transaction": { "id": 7, "type": "sell", "amount": 360, "instrument": "AAPL", "quantity": 3, "price": 120 },
+    "cash_balance": 560,
+    "holdings": { "AAPL": 2 }
+  }
+}
+```
+
+Ако количината е поголема од тоа што клиентот поседува, враќа `422`:
+```json
+{ "message": "Клиентот „Ана Петровска“ поседува само 2 парчиња од AAPL, не може да продаде 10." }
+```
 
 ### Преглед на состојба
 
-GET /api/clients/{id}
+Испраќаш:
 
+GET /api/clients/1
+
+
+Добиваш назад:
+```json
+{
+  "data": {
+    "id": 1,
+    "name": "Ана Петровска",
+    "cash_balance": 860,
+    "holdings": { "AAPL": 2 }
+  }
+}
+```
 
 ### Целосна историја (ledger)
 
-GET /api/clients/{id}/transactions
+Испраќаш:
 
+GET /api/clients/1/transactions
+
+
+Добиваш назад:
+```json
+{
+  "data": [
+    { "id": 1, "type": "deposit", "amount": 1000, "instrument": null, "quantity": null, "price": null, "created_at": "2026-09-04T13:05:10.000000Z" },
+    { "id": 2, "type": "buy", "amount": 500, "instrument": "AAPL", "quantity": 5, "price": 100, "created_at": "2026-09-04T13:05:10.000000Z" },
+    { "id": 3, "type": "sell", "amount": 360, "instrument": "AAPL", "quantity": 3, "price": 120, "created_at": "2026-09-04T13:05:10.000000Z" }
+  ]
+}
+```
 
 ### Список на сите клиенти
 
+Испраќаш:
+
 GET /api/clients
 
+
+Добиваш назад:
+```json
+{
+  "data": [
+    { "id": 1, "name": "Ана Петровска", "cash_balance": 860, "holdings": { "AAPL": 2 } },
+    { "id": 2, "name": "Марко Стојаноски", "cash_balance": 1780, "holdings": { "MSFT": 6, "TSLA": 4 } },
+    { "id": 3, "name": "Јана Илиевска", "cash_balance": 250, "holdings": [] }
+  ]
+}
+```
 
 ## Зошто вака
 
